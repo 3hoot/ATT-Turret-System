@@ -1,0 +1,18 @@
+{
+  "idf.currentSetup": "/home/ehoot/.espressif/v5.5.2/esp-idf",
+  "idf.openOcdConfigs": [
+    "board/esp32s3-builtin.cfg"
+  ],
+  "idf.port": "/dev/ttyACM0",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32s3"
+  },
+  "clangd.path": "/home/ehoot/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=/home/ehoot/Desktop/diploma/firmware/build"
+  ],
+  "idf.flashType": "UART",
+  "idf.monitorPort": "/dev/ttyACM0"
+}

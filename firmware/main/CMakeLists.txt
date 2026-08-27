@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS 
+        "app_main.c"
+        "app_config.h"
+    REQUIRES 
+        heap
+        spi_flash
+        esp_psram
+        log
+        framed_serial
+    INCLUDE_DIRS 
+        .
+)
