@@ -4,3 +4,9 @@ __pycache__/
 
 # Ignore vscode settings
 .vscode/
+
+# Backup, and other unnecessary files of KiCad
+hardware/ATT-backups/
+hardware/*.bak
+hardware/*.kicad_sch-bak
+hardware/*.lck
