@@ -148,6 +148,76 @@ esp_err_t framed_serial_init(const framed_serial_protocol_t protocol, void **con
     return ESP_OK;
 }
 
+framed_serial_frame_t framed_serial_get_frame_from_buffer(const RingbufHandle_t buffer, const TickType_t timeout)
+{
+    framed_serial_frame_t frame;
+    size_t bytes_received = 0;
+    void *frame_prefix = NULL;
+    void *frame_data = NULL;
+
+    const size_t frame_prefix_size = sizeof(frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH;
+
+    frame_prefix = xRingbufferReceiveUpTo(buffer, &bytes_received, timeout, frame_prefix_size);
+    if (frame_prefix == NULL || bytes_received != frame_prefix_size)
+    {
+        ESP_LOGE(TAG, "Failed to receive frame prefix from buffer");
+        if (frame_prefix != NULL)
+        {
+            vRingbufferReturnItem(buffer, frame_prefix);
+        }
+        return (framed_serial_frame_t){0};
+    }
+    vRingbufferReturnItem(buffer, frame_prefix);
+
+    memcpy(&frame, frame_prefix, frame_prefix_size);
+    size_t frame_data_size = frame.data_length;
+
+    if (frame_data_size > FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH)
+    {
+        ESP_LOGE(TAG, "Frame data length %zu exceeds maximum allowed length %d", frame_data_size, FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH);
+        return (framed_serial_frame_t){0};
+    }
+
+    if (frame_data_size > 0)
+    {
+        frame_data = xRingbufferReceiveUpTo(buffer, &bytes_received, timeout, frame_data_size);
+        if (frame_data == NULL || bytes_received != frame_data_size)
+        {
+            ESP_LOGE(TAG, "Failed to receive frame data from buffer");
+            return (framed_serial_frame_t){0};
+        }
+        memcpy(frame.data, frame_data, frame_data_size);
+        vRingbufferReturnItem(buffer, frame_data);
+    }
+
+    return frame;
+}
+
+uint16_t framed_serial_bytes_to_u16_be (const uint8_t *bytes, const size_t start_index)
+{
+    return (uint16_t)((bytes[start_index] << 8) | bytes[start_index + 1]);
+}
+
+uint32_t framed_serial_bytes_to_u32_be (const uint8_t *bytes, const size_t start_index)
+{
+    return (uint32_t)((bytes[start_index] << 24) | (bytes[start_index + 1] << 16) |
+                      (bytes[start_index + 2] << 8) | bytes[start_index + 3]);
+}
+
+void framed_serial_u16_to_bytes_be(const uint16_t value, uint8_t *bytes, const size_t start_index)
+{
+    bytes[start_index] = (uint8_t)(value >> 8);
+    bytes[start_index + 1] = (uint8_t)(value & 0xFF);
+}
+
+void framed_serial_u32_to_bytes_be(const uint32_t value, uint8_t *bytes, const size_t start_index)
+{
+    bytes[start_index] = (uint8_t)(value >> 24);
+    bytes[start_index + 1] = (uint8_t)((value >> 16) & 0xFF);
+    bytes[start_index + 2] = (uint8_t)((value >> 8) & 0xFF);
+    bytes[start_index + 3] = (uint8_t)(value & 0xFF);
+}
+
 static bool framed_serial_byte_parser(const uint8_t byte)
 {
     switch (parser_state)
@@ -293,51 +363,6 @@ static void framed_serial_usb_cdc_rx_callback(int itf, cdcacm_event_t *event)
     }
 }
 
-framed_serial_frame_t retrieve_frame_from_buffer(RingbufHandle_t buffer, TickType_t timeout)
-{
-    framed_serial_frame_t frame;
-    size_t bytes_received = 0;
-    void *frame_prefix = NULL;
-    void *frame_data = NULL;
-
-    const size_t frame_prefix_size = sizeof(frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH;
-
-    frame_prefix = xRingbufferReceiveUpTo(buffer, &bytes_received, timeout, frame_prefix_size);
-    if (frame_prefix == NULL || bytes_received != frame_prefix_size)
-    {
-        ESP_LOGE(TAG, "Failed to receive frame prefix from buffer");
-        if (frame_prefix != NULL)
-        {
-            vRingbufferReturnItem(buffer, frame_prefix);
-        }
-        return (framed_serial_frame_t){0};
-    }
-    vRingbufferReturnItem(buffer, frame_prefix);
-
-    memcpy(&frame, frame_prefix, frame_prefix_size);
-    size_t frame_data_size = frame.data_length;
-
-    if (frame_data_size > FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH)
-    {
-        ESP_LOGE(TAG, "Frame data length %zu exceeds maximum allowed length %d", frame_data_size, FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH);
-        return (framed_serial_frame_t){0};
-    }
-
-    if (frame_data_size > 0)
-    {
-        frame_data = xRingbufferReceiveUpTo(buffer, &bytes_received, timeout, frame_data_size);
-        if (frame_data == NULL || bytes_received != frame_data_size)
-        {
-            ESP_LOGE(TAG, "Failed to receive frame data from buffer");
-            return (framed_serial_frame_t){0};
-        }
-        memcpy(frame.data, frame_data, frame_data_size);
-        vRingbufferReturnItem(buffer, frame_data);
-    }
-
-    return frame;
-}
-
 static void framed_serial_transmiter_task(void *arg)
 {
     framed_serial_frame_t frame;
@@ -351,13 +376,19 @@ static void framed_serial_transmiter_task(void *arg)
 
     while (true)
     {
-        frame = retrieve_frame_from_buffer(tx_buffer, portMAX_DELAY);
+        frame = framed_serial_get_frame_from_buffer(tx_buffer, portMAX_DELAY);
         if (frame.type == 0 && frame.data_length == 0 && frame.checksum == 0)
         {
             ESP_LOGE(TAG, "Failed to retrieve frame from TX buffer");
             continue;
         }
         frame_size = frame_prefix_size + frame.data_length;
+
+        frame.checksum = frame.type + frame.data_length;
+        for (size_t i = 0; i < frame.data_length; i++)
+        {
+            frame.checksum += frame.data[i];
+        }
 
         switch (used_protocol)
         {

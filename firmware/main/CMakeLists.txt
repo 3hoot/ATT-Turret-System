@@ -8,6 +8,7 @@ idf_component_register(
         esp_psram
         log
         framed_serial
+        stepper_driver
     INCLUDE_DIRS 
         .
 )

@@ -22,8 +22,8 @@ extern "C"
  * The raw frame is structured as follows:
  * [1] - Frame Type
  * [2] - Frame Length
- * [3] - Frame Payload
- * [4] - Checksum, calculated as the sum of all bytes in the frame, excluding the checksum byte itself
+ * [3] - Checksum, calculated as the sum of all bytes in the frame, excluding the checksum byte itself
+ * [4] - Frame Payload
  * 
  * The user is responsible for ensuring that the frame type and payload are correctly set, 
  * however the checksum is automatically calculated and verified upon transmission.
@@ -147,7 +147,47 @@ esp_err_t framed_serial_init(const framed_serial_protocol_t protocol, void **con
  * 
  * @return A framed_serial_frame_t structure containing the retrieved frame.
  */
-framed_serial_frame_t retrieve_frame_from_buffer(RingbufHandle_t buffer, TickType_t timeout);
+framed_serial_frame_t framed_serial_get_frame_from_buffer(const RingbufHandle_t buffer, const TickType_t timeout);
+
+/* -------------- Helper functions -------------- */
+
+/*
+ * Converts a sequence of bytes to a 16-bit unsigned integer in big-endian format.
+ *
+ * @param bytes A pointer to the array of bytes.
+ * @param start_index The index of the first byte to convert.
+ *
+ * @return The converted 16-bit unsigned integer.
+ */
+uint16_t framed_serial_bytes_to_u16_be (const uint8_t *bytes, const size_t start_index);
+
+/*
+ * Converts a sequence of bytes to a 32-bit unsigned integer in big-endian format.
+ *
+ * @param bytes A pointer to the array of bytes.
+ * @param start_index The index of the first byte to convert.
+ *
+ * @return The converted 32-bit unsigned integer.
+ */
+uint32_t framed_serial_bytes_to_u32_be (const uint8_t *bytes, const size_t start_index);
+
+/*
+ * Converts a 16-bit unsigned integer to a sequence of bytes in big-endian format.
+ *
+ * @param value The 16-bit unsigned integer to convert.
+ * @param bytes A pointer to the array of bytes.
+ * @param start_index The index of the first byte to write.
+ */
+void framed_serial_u16_to_bytes_be(const uint16_t value, uint8_t *bytes, const size_t start_index);
+
+/*
+ * Converts a 32-bit unsigned integer to a sequence of bytes in big-endian format.
+ *
+ * @param value The 32-bit unsigned integer to convert.
+ * @param bytes A pointer to the array of bytes.
+ * @param start_index The index of the first byte to write.
+ */
+void framed_serial_u32_to_bytes_be(const uint32_t value, uint8_t *bytes, const size_t start_index);
 
 #ifdef __cplusplus
 }
