@@ -321,6 +321,14 @@
     [
       "90eef1c5-0111-4f47-92b7-39c4982c9a4f",
       ""
+    ],
+    [
+      "05d8793d-0754-49b4-820a-e6181cb60be7",
+      "Controller"
+    ],
+    [
+      "a00a2b2a-60de-476c-98b8-1b308d665d46",
+      "Power"
     ]
   ],
   "text_variables": {}
