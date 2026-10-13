@@ -42,8 +42,8 @@ static void framed_serial_usb_cdc_rx_callback(int itf, cdcacm_event_t *event);
 
 /* ----------------- Main logic ----------------- */
 
-RingbufHandle_t rx_buffer = NULL;
-RingbufHandle_t tx_buffer = NULL;
+RingbufHandle_t framed_serial_rx_buffer = NULL;
+RingbufHandle_t framed_serial_tx_buffer = NULL;
 
 /*
  * Task for transmitting framed serial data.
@@ -86,10 +86,10 @@ esp_err_t framed_serial_init(const framed_serial_protocol_t protocol, void **con
         return ESP_ERR_INVALID_ARG;
     }
     
-    rx_buffer = xRingbufferCreate(FRAMED_SERIAL_RX_BUFFER_LENGTH * sizeof(framed_serial_frame_t), RINGBUF_TYPE_BYTEBUF);
-    assert(rx_buffer != NULL && "Failed to create RX buffer");
-    tx_buffer = xRingbufferCreate(FRAMED_SERIAL_TX_BUFFER_LENGTH * sizeof(framed_serial_frame_t), RINGBUF_TYPE_BYTEBUF);
-    assert(tx_buffer != NULL && "Failed to create TX buffer");
+    framed_serial_rx_buffer = xRingbufferCreate(FRAMED_SERIAL_RX_BUFFER_LENGTH * sizeof(framed_serial_frame_t), RINGBUF_TYPE_BYTEBUF);
+    assert(framed_serial_rx_buffer != NULL && "Failed to create RX buffer");
+    framed_serial_tx_buffer = xRingbufferCreate(FRAMED_SERIAL_TX_BUFFER_LENGTH * sizeof(framed_serial_frame_t), RINGBUF_TYPE_BYTEBUF);
+    assert(framed_serial_tx_buffer != NULL && "Failed to create TX buffer");
 
     switch (protocol)
     {
@@ -193,31 +193,6 @@ framed_serial_frame_t framed_serial_get_frame_from_buffer(const RingbufHandle_t 
     return frame;
 }
 
-uint16_t framed_serial_bytes_to_u16_be (const uint8_t *bytes, const size_t start_index)
-{
-    return (uint16_t)((bytes[start_index] << 8) | bytes[start_index + 1]);
-}
-
-uint32_t framed_serial_bytes_to_u32_be (const uint8_t *bytes, const size_t start_index)
-{
-    return (uint32_t)((bytes[start_index] << 24) | (bytes[start_index + 1] << 16) |
-                      (bytes[start_index + 2] << 8) | bytes[start_index + 3]);
-}
-
-void framed_serial_u16_to_bytes_be(const uint16_t value, uint8_t *bytes, const size_t start_index)
-{
-    bytes[start_index] = (uint8_t)(value >> 8);
-    bytes[start_index + 1] = (uint8_t)(value & 0xFF);
-}
-
-void framed_serial_u32_to_bytes_be(const uint32_t value, uint8_t *bytes, const size_t start_index)
-{
-    bytes[start_index] = (uint8_t)(value >> 24);
-    bytes[start_index + 1] = (uint8_t)((value >> 16) & 0xFF);
-    bytes[start_index + 2] = (uint8_t)((value >> 8) & 0xFF);
-    bytes[start_index + 3] = (uint8_t)(value & 0xFF);
-}
-
 static bool framed_serial_byte_parser(const uint8_t byte)
 {
     switch (parser_state)
@@ -313,7 +288,7 @@ static void framed_serial_uart_event_task(void *arg)
                         /* A complete frame has been parsed */
                         frame_size = sizeof(parsed_frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH + parsed_frame.data_length;
 
-                        if (xRingbufferSend(rx_buffer, &parsed_frame, frame_size, portMAX_DELAY) != pdTRUE)
+                        if (xRingbufferSend(framed_serial_rx_buffer, &parsed_frame, frame_size, portMAX_DELAY) != pdTRUE)
                         {
                             ESP_LOGE(TAG, "Failed to send parsed frame to RX buffer");
                             parser_state = STATE_WAIT_START;  /* Reset parser state to avoid desynchronization */
@@ -354,7 +329,7 @@ static void framed_serial_usb_cdc_rx_callback(int itf, cdcacm_event_t *event)
         {
             size_t frame_size = sizeof(parsed_frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH + parsed_frame.data_length;
 
-            if (xRingbufferSend(rx_buffer, &parsed_frame, frame_size, pdMS_TO_TICKS(50)) != pdTRUE)
+            if (xRingbufferSend(framed_serial_rx_buffer, &parsed_frame, frame_size, pdMS_TO_TICKS(50)) != pdTRUE)
             {
                 ESP_LOGE(TAG, "Failed to send parsed frame to RX buffer");
                 parser_state = STATE_WAIT_START;  /* Reset parser state to avoid desynchronization */
@@ -376,7 +351,7 @@ static void framed_serial_transmiter_task(void *arg)
 
     while (true)
     {
-        frame = framed_serial_get_frame_from_buffer(tx_buffer, portMAX_DELAY);
+        frame = framed_serial_get_frame_from_buffer(framed_serial_tx_buffer, portMAX_DELAY);
         if (frame.type == 0 && frame.data_length == 0 && frame.checksum == 0)
         {
             ESP_LOGE(TAG, "Failed to retrieve frame from TX buffer");

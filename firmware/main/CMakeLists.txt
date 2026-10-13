@@ -7,8 +7,11 @@ idf_component_register(
         spi_flash
         esp_psram
         log
+        esp_driver_i2c
         framed_serial
         stepper_driver
+        sensor_drivers
+        utils
     INCLUDE_DIRS 
         .
 )

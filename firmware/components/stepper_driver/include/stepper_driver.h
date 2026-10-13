@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "esp_err.h"
+#include "driver/rmt_tx.h"
 
 /* Preprocessor directive to avoid C++ name mangling */
 #ifdef __cplusplus
@@ -12,12 +13,25 @@ extern "C"
 {
 #endif
 
-#define STEPPER_DRV_MAX_NUM_STEPPERS        (2)
 #define STEPPER_DRV_ACTIVE_PIN_VALUE        (0)
 #define STEPPER_DRV_RMT_QUEUE_SIZE          (4)         /* Number of RMT events to queue for each stepper */ 
 #define STEPPER_DRV_RMT_RESOLUTION_HZ       (1000000)   /* 1 MHz tick rate (1 tick = 1 µs) */
 #define STEPPER_DRV_MAX_STEP_FREQUENCY_HZ   (20000)     /* Actual physical step-rate ceiling */
 #define STEPPER_DRV_STEP_DUTY_CYCLE_PERCENT (25)        /* Step pulse duty cycle in percentage */    
+
+typedef struct stepper_drv_stepper_config
+{
+    uint8_t pin_step;
+    uint8_t pin_dir;
+    uint8_t pin_enable;
+} stepper_drv_stepper_config_t;
+
+typedef enum stepper_drv_state
+{
+    STEPPER_DRV_STATE_ENABLED, 
+    STEPPER_DRV_STATE_DISABLED,   
+    STEPPER_DRV_STATE_MOVING
+} stepper_drv_state_t;
 
 typedef enum stepper_drv_direction
 {
@@ -25,58 +39,67 @@ typedef enum stepper_drv_direction
     STEPPER_DRV_DIRECTION_REV  
 } stepper_drv_direction_t;
 
-typedef struct stepper_drv_stepper_config
+/*
+ * Stepper driver handle structure.
+ * It is advised to treat this structure as opaque and not access its members directly.
+ * Use the provided API functions to interact with the stepper driver.
+ */
+typedef struct stepper_drv_stepper_handle
 {
-    uint8_t stepper_id;
-    uint8_t pin_step;
-    uint8_t pin_dir;
-    uint8_t pin_enable;
-} stepper_drv_stepper_config_t;
+    stepper_drv_stepper_config_t config;
+    rmt_channel_handle_t rmt_channel;
+    rmt_encoder_t *copy_encoder;
+    _Atomic uint16_t step_frequency_hz;
+    _Atomic int32_t step_position;
+    _Atomic stepper_drv_state_t state;
+    stepper_drv_direction_t direction;
+} stepper_drv_stepper_handle_t;
 
 /*
  * Initialize the stepper driver with the provided configurations.
  *
- * @param stepper_configs Array of stepper configurations.
- * @param num_steppers Number of steppers to initialize.
+ * @param stepper_configs Stepper configuration structure.
+ * @param stepper_handle Pointer to the stepper handle.
  * @return ESP_OK if successful, otherwise an error code.
  */
-esp_err_t stepper_drv_init(const stepper_drv_stepper_config_t *stepper_configs, const size_t num_steppers);
+esp_err_t stepper_drv_init(const stepper_drv_stepper_config_t stepper_config, stepper_drv_stepper_handle_t* stepper_handle);
 
 /* -------------- Raw step control -------------- */
 
 /*
  * Starts a raw step on the specified stepper motor.
  *
- * @param stepper_id The ID of the stepper motor.
+ * @param stepper_handle Pointer to the stepper handle.
  * @param direction The direction of the step.
  * @return ESP_OK if successful, otherwise an error code.
  */
-esp_err_t stepper_drv_raw_step_start(const uint8_t stepper_id, stepper_drv_direction_t direction);
+esp_err_t stepper_drv_raw_step_start(stepper_drv_stepper_handle_t* stepper_handle, const stepper_drv_direction_t direction);
 
 /*
  * Sets the frequency of the raw step for the specified stepper motor.
  *
- * @param stepper_id The ID of the stepper motor.
+ * @param stepper_handle Pointer to the stepper handle.
  * @param freq_hz The frequency of the step in Hz.
  * @return ESP_OK if successful, otherwise an error code.
  */
-esp_err_t stepper_drv_raw_step_set_frequency(const uint8_t stepper_id, uint32_t freq_hz);
+esp_err_t stepper_drv_raw_step_set_frequency(stepper_drv_stepper_handle_t* stepper_handle, const uint32_t freq_hz);
 
 /*
  * Stops the raw step for the specified stepper motor.
  *
- * @param stepper_id The ID of the stepper motor.
+ * @param stepper_handle Pointer to the stepper handle.
  * @return ESP_OK if successful, otherwise an error code.
  */
-esp_err_t stepper_drv_raw_step_stop(const uint8_t stepper_id);
+esp_err_t stepper_drv_raw_step_stop(stepper_drv_stepper_handle_t* stepper_handle);
 
 /*
  * Gets the current position (in steps) of the specified stepper motor.
  *
- * @param stepper_id The ID of the stepper motor.
- * @return The current step position of the stepper motor.
+ * @param stepper_handle Pointer to the stepper handle.
+ * @param position Pointer to the position variable.
+ * @return ESP_OK if successful, otherwise an error code.
  */
-int32_t stepper_drv_get_position(const uint8_t stepper_id);
+esp_err_t stepper_drv_get_position(stepper_drv_stepper_handle_t* stepper_handle, int32_t *position);
 
 /* --------------- Motor control ---------------- */
 
@@ -85,10 +108,10 @@ int32_t stepper_drv_get_position(const uint8_t stepper_id);
  * Puts the stepper into an enabled state.
  * While in the enabled state, the stepper can execute moves and respond to halt/resume commands.
  * 
- * @param stepper_id The ID of the stepper motor to enable.
+ * @param stepper_handle Pointer to the stepper handle.
  * @return ESP_OK if successful, otherwise an error code.
  */
-esp_err_t stepper_drv_enable(const uint8_t stepper_id);
+esp_err_t stepper_drv_enable(stepper_drv_stepper_handle_t* stepper_handle);
 
 /*
  * Disables the specified stepper motor, preventing it from executing moves.
@@ -96,10 +119,10 @@ esp_err_t stepper_drv_enable(const uint8_t stepper_id);
  * While in the disabled state, the stepper will not execute any moves and will ignore halt/resume commands.
  * Additionally, the physical stepper will be powered down; allowing for hand manipulation (useful for calibration).
  *
- * @param stepper_id The ID of the stepper motor to disable.
+ * @param stepper_handle Pointer to the stepper handle.
  * @return ESP_OK if successful, otherwise an error code.
  */
-esp_err_t stepper_drv_disable(const uint8_t stepper_id);
+esp_err_t stepper_drv_disable(stepper_drv_stepper_handle_t* stepper_handle);
 
 #ifdef __cplusplus
 }

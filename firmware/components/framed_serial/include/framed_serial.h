@@ -60,7 +60,6 @@ typedef struct framed_serial_uart_config
     uint8_t rx_pin;
     uint8_t cts_pin;
     uint8_t rts_pin;
-
 } framed_serial_uart_config_t;
 
 /* -------------------- UART -------------------- */
@@ -122,8 +121,8 @@ typedef struct framed_serial_uart_config
  * Recieved data is pushed to the RX buffer by the protocol handler, and can be read from the RX buffer by the user (and disposed of).
  * Data to be sent is meant to be pushed to the TX buffer by the user, and is handled by the internal frame parser.
  */
-extern RingbufHandle_t rx_buffer;
-extern RingbufHandle_t tx_buffer;
+extern RingbufHandle_t framed_serial_rx_buffer;
+extern RingbufHandle_t framed_serial_tx_buffer;
 
 /*
  * Initializes the framed serial communication with the specified protocol and configuration.
@@ -142,52 +141,12 @@ esp_err_t framed_serial_init(const framed_serial_protocol_t protocol, void **con
  * Upon successful retrieval, the frame is removed from the buffer and returned to the caller.
  * If the function fails for some reason, a framed_serial_frame_t structure with all fields set to zero is returned.
  * 
- * @param buffer The ring buffer to read from (either rx_buffer or tx_buffer).
+ * @param buffer The ring buffer to read from (either framed_serial_rx_buffer or framed_serial_tx_buffer).
  * @param timeout The maximum time to wait for a complete frame, in ticks.
  * 
  * @return A framed_serial_frame_t structure containing the retrieved frame.
  */
 framed_serial_frame_t framed_serial_get_frame_from_buffer(const RingbufHandle_t buffer, const TickType_t timeout);
-
-/* -------------- Helper functions -------------- */
-
-/*
- * Converts a sequence of bytes to a 16-bit unsigned integer in big-endian format.
- *
- * @param bytes A pointer to the array of bytes.
- * @param start_index The index of the first byte to convert.
- *
- * @return The converted 16-bit unsigned integer.
- */
-uint16_t framed_serial_bytes_to_u16_be (const uint8_t *bytes, const size_t start_index);
-
-/*
- * Converts a sequence of bytes to a 32-bit unsigned integer in big-endian format.
- *
- * @param bytes A pointer to the array of bytes.
- * @param start_index The index of the first byte to convert.
- *
- * @return The converted 32-bit unsigned integer.
- */
-uint32_t framed_serial_bytes_to_u32_be (const uint8_t *bytes, const size_t start_index);
-
-/*
- * Converts a 16-bit unsigned integer to a sequence of bytes in big-endian format.
- *
- * @param value The 16-bit unsigned integer to convert.
- * @param bytes A pointer to the array of bytes.
- * @param start_index The index of the first byte to write.
- */
-void framed_serial_u16_to_bytes_be(const uint16_t value, uint8_t *bytes, const size_t start_index);
-
-/*
- * Converts a 32-bit unsigned integer to a sequence of bytes in big-endian format.
- *
- * @param value The 32-bit unsigned integer to convert.
- * @param bytes A pointer to the array of bytes.
- * @param start_index The index of the first byte to write.
- */
-void framed_serial_u32_to_bytes_be(const uint32_t value, uint8_t *bytes, const size_t start_index);
 
 #ifdef __cplusplus
 }
