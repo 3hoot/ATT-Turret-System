@@ -42,24 +42,29 @@
 
 /* ------------------- I2C bus ------------------ */
 
-#define APP_I2C_BUS_1_INTERRUPT_PRIORITY    (1)
-#define APP_I2C_BUS_1_SDA_PIN               (GPIO_NUM_18)
-#define APP_I2C_BUS_1_SCL_PIN               (GPIO_NUM_17)
+#define APP_I2C_BUS_A_INTERRUPT_PRIORITY    (1)
+#define APP_I2C_BUS_A_SDA_PIN               (GPIO_NUM_18)
+#define APP_I2C_BUS_A_SCL_PIN               (GPIO_NUM_17)
 
-#define APP_I2C_BUS_2_INTERRUPT_PRIORITY    (1)
-#define APP_I2C_BUS_2_SDA_PIN               (GPIO_NUM_13)
-#define APP_I2C_BUS_2_SCL_PIN               (GPIO_NUM_12)
+#define APP_I2C_BUS_B_INTERRUPT_PRIORITY    (1)
+#define APP_I2C_BUS_B_SDA_PIN               (GPIO_NUM_13)
+#define APP_I2C_BUS_B_SCL_PIN               (GPIO_NUM_12)
+
+/* Joined search macros */
+#define APP_I2C_SCAN_TIMEOUT_MS                 (100)
+#define APP_I2C_SCAN_MAX_FOUND_DEVICES          (10)
+#define APP_I2C_SCAN_FOUND_DEVICES_ARRAY_SIZE   (APP_I2C_SCAN_MAX_FOUND_DEVICES)
 
 /* ------------------- AS5600 ------------------- */
 
-#define APP_AS5600_SENSOR_COUNT (2)
+#define APP_AS5600_COUNT (2)
 
 /* ------------------- INA226 ------------------- */
 
-#define APP_INA226_SENSOR_COUNT     (2)
-#define APP_INA226_1_I2C_ADDRESS    (0b1000000) 
-#define APP_INA226_2_I2C_ADDRESS    (0b1000000)
-#define APP_INA226_1_ALERT_GPIO_PIN (GPIO_NUM_8)
-#define APP_INA226_2_ALERT_GPIO_PIN (GPIO_NUM_14)
+#define APP_INA226_COUNT            (2)
+#define APP_INA226_A_I2C_ADDRESS    (0x44) 
+#define APP_INA226_B_I2C_ADDRESS    (0x44)
+#define APP_INA226_A_ALERT_GPIO_PIN (GPIO_NUM_8)
+#define APP_INA226_B_ALERT_GPIO_PIN (GPIO_NUM_14)
 
 #endif /* CONFIG_H */

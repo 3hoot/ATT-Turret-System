@@ -21,7 +21,7 @@ extern "C"
 /*
  * The raw frame is structured as follows:
  * [1] - Frame Type
- * [2] - Frame Length
+ * [2] - Frame Payload Length
  * [3] - Checksum, calculated as the sum of all bytes in the frame, excluding the checksum byte itself
  * [4] - Frame Payload
  * 

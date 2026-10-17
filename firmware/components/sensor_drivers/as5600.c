@@ -32,10 +32,9 @@ esp_err_t as5600_init(i2c_master_bus_handle_t bus_handle, const as5600_config_t 
         .scl_speed_hz = AS5600_I2C_SPEED_HZ,
     };
 
-    ESP_LOGI(TAG, "Adding device to I2C bus and probing for device presence");
+    ESP_LOGI(TAG, "Adding device to I2C bus at address 0x%02X", AS5600_I2C_ADDRESS);
     i2c_master_dev_handle_t bus_dev_handle;
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_config, &bus_dev_handle));
-    ESP_ERROR_CHECK(i2c_master_probe(bus_handle, AS5600_I2C_ADDRESS, AS5600_I2C_TIMEOUT_MS));
     
     dev_handle->bus_handle = bus_handle;
     dev_handle->bus_dev_handle = bus_dev_handle;

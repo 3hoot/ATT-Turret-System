@@ -34,12 +34,12 @@ static bool IRAM_ATTR stepper_drv_raw_step_done(rmt_channel_handle_t channel, co
 
 static uint8_t stepper_drv_stepper_instance_count = 0;
 
-esp_err_t stepper_drv_init(const stepper_drv_stepper_config_t stepper_config, stepper_drv_stepper_handle_t* stepper_handle)
+esp_err_t stepper_drv_init(const stepper_drv_config_t stepper_config, stepper_drv_handle_t* stepper_handle)
 {
     ESP_RETURN_ON_FALSE((stepper_config.pin_step != GPIO_NUM_NC) && (stepper_config.pin_dir != GPIO_NUM_NC) && (stepper_config.pin_enable != GPIO_NUM_NC),
                         ESP_ERR_INVALID_ARG, TAG, "Invalid stepper pin configuration");
 
-    *stepper_handle = (stepper_drv_stepper_handle_t) {
+    *stepper_handle = (stepper_drv_handle_t) {
         .config = stepper_config
     };
 
@@ -80,7 +80,7 @@ esp_err_t stepper_drv_init(const stepper_drv_stepper_config_t stepper_config, st
     return ESP_OK;
 }
 
-esp_err_t stepper_drv_raw_step_start(stepper_drv_stepper_handle_t* stepper_handle, const stepper_drv_direction_t direction)
+esp_err_t stepper_drv_raw_step_start(stepper_drv_handle_t* stepper_handle, const stepper_drv_direction_t direction)
 {
     ESP_RETURN_ON_FALSE(stepper_handle != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid stepper handle");
     ESP_RETURN_ON_FALSE(stepper_handle->state != STEPPER_DRV_STATE_DISABLED, ESP_ERR_INVALID_STATE, TAG, "Stepper is disabled");
@@ -114,7 +114,7 @@ esp_err_t stepper_drv_raw_step_start(stepper_drv_stepper_handle_t* stepper_handl
     return ESP_OK;
 }
 
-esp_err_t stepper_drv_raw_step_set_frequency(stepper_drv_stepper_handle_t* stepper_handle, const uint32_t freq_hz)
+esp_err_t stepper_drv_raw_step_set_frequency(stepper_drv_handle_t* stepper_handle, const uint32_t freq_hz)
 {
     ESP_RETURN_ON_FALSE(stepper_handle != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid stepper handle");
     ESP_RETURN_ON_FALSE(freq_hz >= 0 && freq_hz <= STEPPER_DRV_MAX_STEP_FREQUENCY_HZ, ESP_ERR_INVALID_ARG, TAG, "Frequency %d Hz is out of range", freq_hz);
@@ -124,7 +124,7 @@ esp_err_t stepper_drv_raw_step_set_frequency(stepper_drv_stepper_handle_t* stepp
     return ESP_OK;
 }
 
-esp_err_t stepper_drv_raw_step_stop(stepper_drv_stepper_handle_t* stepper_handle)
+esp_err_t stepper_drv_raw_step_stop(stepper_drv_handle_t* stepper_handle)
 {
     ESP_RETURN_ON_FALSE(stepper_handle != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid stepper handle");
 
@@ -133,7 +133,7 @@ esp_err_t stepper_drv_raw_step_stop(stepper_drv_stepper_handle_t* stepper_handle
     return ESP_OK;
 }
 
-esp_err_t stepper_drv_get_position(stepper_drv_stepper_handle_t* stepper_handle, int32_t *position)
+esp_err_t stepper_drv_get_position(stepper_drv_handle_t* stepper_handle, int32_t *position)
 {
     ESP_RETURN_ON_FALSE(stepper_handle != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid stepper handle");
     ESP_RETURN_ON_FALSE(position != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid position pointer");
@@ -142,7 +142,7 @@ esp_err_t stepper_drv_get_position(stepper_drv_stepper_handle_t* stepper_handle,
     return ESP_OK;
 }
 
-esp_err_t stepper_drv_enable(stepper_drv_stepper_handle_t* stepper_handle)
+esp_err_t stepper_drv_enable(stepper_drv_handle_t* stepper_handle)
 {
     ESP_RETURN_ON_FALSE(stepper_handle != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid stepper handle");
 
@@ -152,7 +152,7 @@ esp_err_t stepper_drv_enable(stepper_drv_stepper_handle_t* stepper_handle)
     return ESP_OK;
 }
 
-esp_err_t stepper_drv_disable(stepper_drv_stepper_handle_t* stepper_handle)
+esp_err_t stepper_drv_disable(stepper_drv_handle_t* stepper_handle)
 {
     ESP_RETURN_ON_FALSE(stepper_handle != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid stepper handle");
 
@@ -185,7 +185,7 @@ static void stepper_drv_rmt_build_symbol(const uint32_t frequency_hz, rmt_symbol
 
 static bool IRAM_ATTR stepper_drv_raw_step_done(rmt_channel_handle_t channel, const rmt_tx_done_event_data_t *event_data, void *arg)
 {
-    stepper_drv_stepper_handle_t* stepper_handle = (stepper_drv_stepper_handle_t *)arg;
+    stepper_drv_handle_t* stepper_handle = (stepper_drv_handle_t *)arg;
     if (stepper_handle == NULL)
     {
         return false;

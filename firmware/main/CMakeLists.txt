@@ -8,6 +8,7 @@ idf_component_register(
         esp_psram
         log
         esp_driver_i2c
+        motion_controller
         framed_serial
         stepper_driver
         sensor_drivers

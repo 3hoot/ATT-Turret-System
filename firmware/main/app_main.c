@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -21,10 +22,12 @@
 
 static const char *TAG = "app_main";
 
-/* Held as an array for easy access to all devices */
-static stepper_drv_stepper_handle_t *steppers[APP_STEPPER_COUNT];
-static as5600_handle_t *position_sensors[APP_AS5600_SENSOR_COUNT];
-static ina226_handle_t *power_sensors[APP_INA226_SENSOR_COUNT];
+#define A_ID (0)
+#define B_ID (1)
+
+static stepper_drv_handle_t stepper[APP_STEPPER_COUNT] = {0};
+static as5600_handle_t position_sensor[APP_AS5600_COUNT] = {0};
+static ina226_handle_t power_sensor[APP_INA226_COUNT] = {0};
 
 /* -------------- Command executor -------------- */
 
@@ -88,23 +91,20 @@ void app_main(void)
 
     /* ------------- Stepper driver init ------------ */
 
-    stepper_drv_stepper_handle_t stepper_A_handle = {0};
-    stepper_drv_stepper_config_t stepper_A_config = {
+    stepper_drv_config_t stepper_A_config = {
         .pin_step = APP_STEPPER_A_STEP_PIN,
         .pin_dir = APP_STEPPER_A_DIR_PIN,
         .pin_enable = APP_STEPPER_A_EN_PIN
     };
-    ESP_ERROR_CHECK(stepper_drv_init(stepper_A_config, &stepper_A_handle));
-    steppers[0] = &stepper_A_handle;
+    ESP_ERROR_CHECK(stepper_drv_init(stepper_A_config, &stepper[A_ID]));
 
-    stepper_drv_stepper_handle_t stepper_B_handle = {0};
-    stepper_drv_stepper_config_t stepper_B_config = {
+    stepper_drv_handle_t stepper_B_handle = {0};
+    stepper_drv_config_t stepper_B_config = {
         .pin_step = APP_STEPPER_B_STEP_PIN,
         .pin_dir = APP_STEPPER_B_DIR_PIN,
         .pin_enable = APP_STEPPER_B_EN_PIN
     };
-    ESP_ERROR_CHECK(stepper_drv_init(stepper_B_config, &stepper_B_handle));
-    steppers[1] = &stepper_B_handle;
+    ESP_ERROR_CHECK(stepper_drv_init(stepper_B_config, &stepper[B_ID]));
 
     /* ---------------- I2C bus init ---------------- */
 
@@ -115,53 +115,51 @@ void app_main(void)
      * (Internal pull-ups are not strong enough for high-speed I2C communication).
      */
 
-    i2c_master_bus_config_t bus_1_config = {
+    i2c_master_bus_config_t bus_A_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
-        .flags.enable_internal_pullup = 1,
+        .flags.enable_internal_pullup = 0,
         .glitch_ignore_cnt = 7,
         .i2c_port = I2C_NUM_0,
-        .intr_priority = APP_I2C_BUS_1_INTERRUPT_PRIORITY,
-        .scl_io_num = APP_I2C_BUS_1_SCL_PIN,
-        .sda_io_num = APP_I2C_BUS_1_SDA_PIN
+        .intr_priority = APP_I2C_BUS_A_INTERRUPT_PRIORITY,
+        .scl_io_num = APP_I2C_BUS_A_SCL_PIN,
+        .sda_io_num = APP_I2C_BUS_A_SDA_PIN
     };
-    i2c_master_bus_handle_t bus_1_handle = NULL;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_1_config, &bus_1_handle));
+    i2c_master_bus_handle_t bus_A_handle = NULL;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_A_config, &bus_A_handle));
     
-    i2c_master_bus_config_t bus_2_config = {
+    i2c_master_bus_config_t bus_B_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .flags.enable_internal_pullup = 0,
         .glitch_ignore_cnt = 7,
         .i2c_port = I2C_NUM_1,
-        .intr_priority = APP_I2C_BUS_2_INTERRUPT_PRIORITY,
-        .scl_io_num = APP_I2C_BUS_2_SCL_PIN,
-        .sda_io_num = APP_I2C_BUS_2_SDA_PIN
+        .intr_priority = APP_I2C_BUS_B_INTERRUPT_PRIORITY,
+        .scl_io_num = APP_I2C_BUS_B_SCL_PIN,
+        .sda_io_num = APP_I2C_BUS_B_SDA_PIN
     };
-    i2c_master_bus_handle_t bus_2_handle = NULL;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_2_config, &bus_2_handle));
+    i2c_master_bus_handle_t bus_B_handle = NULL;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_B_config, &bus_B_handle));
 
-    /* -------- AS5600 position sensors init -------- */
-
-    as5600_config_t as5600_1_config = AS5600_DEFAULT_CONFIG;
-    as5600_handle_t as5600_1_handle = {0};
-    ESP_ERROR_CHECK(as5600_init(bus_1_handle, &as5600_1_config, &as5600_1_handle));
-    position_sensors[0] = &as5600_1_handle;
-
-    as5600_config_t as5600_2_config = AS5600_DEFAULT_CONFIG;
-    as5600_handle_t as5600_2_handle = {0};
-    ESP_ERROR_CHECK(as5600_init(bus_2_handle, &as5600_2_config, &as5600_2_handle));
-    position_sensors[1] = &as5600_2_handle;
+    uint8_t found_addresses[APP_I2C_SCAN_FOUND_DEVICES_ARRAY_SIZE] = {0};
+    size_t found_count_A = 0;
+    size_t found_count_B = 0;
+    utils_scan_i2c_bus(bus_A_handle, found_addresses, &found_count_A, APP_I2C_SCAN_MAX_FOUND_DEVICES, APP_I2C_SCAN_TIMEOUT_MS);
+    utils_scan_i2c_bus(bus_B_handle, (found_addresses + (uint8_t)found_count_A), &found_count_B, (APP_I2C_SCAN_MAX_FOUND_DEVICES - found_count_A), APP_I2C_SCAN_TIMEOUT_MS);
 
     /* ---------- INA226 power sensors init --------- */
 
-    ina226_config_t ina226_1_config = INA226_DEFAULT_CONFIG;
-    ina226_handle_t ina226_1_handle = {0};
-    ESP_ERROR_CHECK(ina226_init(bus_1_handle, &ina226_1_config, APP_INA226_1_I2C_ADDRESS, &ina226_1_handle));
-    power_sensors[0] = &ina226_1_handle;
+    ina226_config_t power_sensor_A_config = INA226_DEFAULT_CONFIG;
+    ESP_ERROR_CHECK(ina226_init(bus_A_handle, &power_sensor_A_config, APP_INA226_A_I2C_ADDRESS, &power_sensor[A_ID]));
     
-    ina226_config_t ina226_2_config = INA226_DEFAULT_CONFIG;
-    ina226_handle_t ina226_2_handle = {0};
-    ESP_ERROR_CHECK(ina226_init(bus_2_handle, &ina226_2_config, APP_INA226_2_I2C_ADDRESS, &ina226_2_handle));
-    power_sensors[1] = &ina226_2_handle;
+    ina226_config_t ina226_B_config = INA226_DEFAULT_CONFIG;
+    ESP_ERROR_CHECK(ina226_init(bus_B_handle, &ina226_B_config, APP_INA226_B_I2C_ADDRESS, &power_sensor[B_ID]));
+
+    /* -------- AS5600 position sensors init -------- */
+
+    as5600_config_t position_sensor_A_config = AS5600_DEFAULT_CONFIG;
+    ESP_ERROR_CHECK(as5600_init(bus_A_handle, &position_sensor_A_config, &position_sensor[A_ID]));
+
+    as5600_config_t position_sensor_B_config = AS5600_DEFAULT_CONFIG;
+    ESP_ERROR_CHECK(as5600_init(bus_B_handle, &position_sensor_B_config, &position_sensor[B_ID]));
 
     /* ------------ Command executor init ----------- */
 
@@ -169,7 +167,7 @@ void app_main(void)
                 NULL, APP_EXECUTOR_TASK_PRIORITY, &app_executor_task_handle);
     if (app_executor_task_handle == NULL)
     {
-        ESP_LOGE(TAG, "APP_EXECUTOR", "Failed to create app executor task");
+        ESP_LOGE(TAG, "Failed to create app executor task");
     }
 }
 
@@ -211,12 +209,12 @@ static void app_executor_task(void *arg)
 
             case APP_CMD_STEP_ARM_CODE:
                 ESP_LOGI(TAG, "Received STEP_ARM command for stepper ID: %d", rx_frame.data[0]);
-                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_enable(steppers[rx_frame.data[0]])));
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_enable(&stepper[rx_frame.data[0]])));
                 break;
-
+                
             case APP_CMD_STEP_DISARM_CODE:
                 ESP_LOGI(TAG, "Received STEP_DISARM command for stepper ID: %d", rx_frame.data[0]);
-                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_disable(steppers[rx_frame.data[0]])));
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_disable(&stepper[rx_frame.data[0]])));
                 break;
 
             case APP_CMD_STEP_START_CODE:
@@ -227,13 +225,13 @@ static void app_executor_task(void *arg)
                 ESP_LOGI(TAG, "Received STEP_START command for stepper ID: %d, direction: %s",
                          stepper_id, (direction == STEPPER_DRV_DIRECTION_FWD) ? "FWD" : "REV");
 
-                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_raw_step_start(steppers[stepper_id], direction)));
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_raw_step_start(&stepper[stepper_id], direction)));
                 break;
             }
 
             case APP_CMD_STEP_STOP_CODE:
                 ESP_LOGI(TAG, "Received STEP_STOP command for stepper ID: %d", rx_frame.data[0]);
-                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_raw_step_stop(steppers[rx_frame.data[0]])));
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_raw_step_stop(&stepper[rx_frame.data[0]])));
                 break;
 
             case APP_CMD_STEP_SET_FREQ_CODE:
@@ -244,7 +242,7 @@ static void app_executor_task(void *arg)
                 ESP_LOGI(TAG, "Received STEP_SET_FREQ command for stepper ID: %d, frequency: %u Hz",
                          stepper_id, stepper_raw_frequency_hz);
 
-                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_raw_step_set_frequency(steppers[stepper_id], stepper_raw_frequency_hz)));
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, stepper_drv_raw_step_set_frequency(&stepper[stepper_id], stepper_raw_frequency_hz)));
                 break;
             }
 
@@ -252,7 +250,7 @@ static void app_executor_task(void *arg)
             {
                 uint8_t stepper_id = rx_frame.data[0];
                 int32_t position = 0;
-                ESP_ERROR_CHECK_WITHOUT_ABORT(stepper_drv_get_position(steppers[stepper_id], &position));
+                ESP_ERROR_CHECK_WITHOUT_ABORT(stepper_drv_get_position(&stepper[stepper_id], &position));
 
                 ESP_LOGI(TAG, "Received STEP_GET_POS command for stepper ID: %d, current position: %d", stepper_id, position);
 
@@ -266,7 +264,7 @@ static void app_executor_task(void *arg)
             {
                 uint8_t sensor_id = rx_frame.data[0];
                 float angle = 0;
-                ESP_ERROR_CHECK_WITHOUT_ABORT(as5600_read_angle(position_sensors[sensor_id], &angle));
+                ESP_ERROR_CHECK_WITHOUT_ABORT(as5600_read_angle(&position_sensor[sensor_id], &angle));
 
                 ESP_LOGI(TAG, "Received SENSE_GET_POS command for sensor ID: %d, current angle: %f", sensor_id, angle);
 
@@ -284,7 +282,7 @@ static void app_executor_task(void *arg)
 
                 ESP_LOGI(TAG, "Received SENSE_SET_ZERO command for sensor ID: %d, zero angle set to: %u", sensor_id, current_angle);
 
-                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, as5600_set_zero_angle(position_sensors[sensor_id], current_angle)));
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, as5600_set_zero_angle(&position_sensor[sensor_id], current_angle)));
                 break;
             }
 
@@ -292,7 +290,7 @@ static void app_executor_task(void *arg)
             {
                 uint8_t sensor_id = rx_frame.data[0];
                 float power = 0;
-                ESP_ERROR_CHECK_WITHOUT_ABORT(ina226_read_power(power_sensors[sensor_id], &power));
+                ESP_ERROR_CHECK_WITHOUT_ABORT(ina226_read_power(&power_sensor[sensor_id], &power));
 
                 ESP_LOGI(TAG, "Received SENSE_GET_PWR command for sensor ID: %d, current power: %f", sensor_id, power);
 
@@ -307,7 +305,7 @@ static void app_executor_task(void *arg)
             {
                 uint8_t sensor_id = rx_frame.data[0];
                 float current = 0;
-                ESP_ERROR_CHECK_WITHOUT_ABORT(ina226_read_current(power_sensors[sensor_id], &current));
+                ESP_ERROR_CHECK_WITHOUT_ABORT(ina226_read_current(&power_sensor[sensor_id], &current));
 
                 ESP_LOGI(TAG, "Received SENSE_GET_CURR command for sensor ID: %d, current current: %f", sensor_id, current);
 
@@ -322,7 +320,7 @@ static void app_executor_task(void *arg)
             {
                 uint8_t sensor_id = rx_frame.data[0];
                 float voltage = 0;
-                ESP_ERROR_CHECK(ina226_read_bus_voltage(power_sensors[sensor_id], &voltage));
+                ESP_ERROR_CHECK(ina226_read_bus_voltage(&power_sensor[sensor_id], &voltage));
 
                 ESP_LOGI(TAG, "Received SENSE_GET_VOLT command for sensor ID: %d, current voltage: %f", sensor_id, voltage);
 
