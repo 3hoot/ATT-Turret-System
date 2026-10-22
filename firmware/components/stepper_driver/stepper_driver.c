@@ -89,7 +89,6 @@ esp_err_t stepper_drv_raw_step_start(stepper_drv_handle_t* stepper_handle, const
     {
         /* Already running, just update the direction */
         stepper_handle->direction = direction;
-        ESP_LOGI(TAG, "Stepper already moving, updated direction to %s", direction == STEPPER_DRV_DIRECTION_FWD ? "FWD" : "REV");
         gpio_set_level(stepper_handle->config.pin_dir, direction == STEPPER_DRV_DIRECTION_FWD ? STEPPER_DRV_ACTIVE_PIN_VALUE : !STEPPER_DRV_ACTIVE_PIN_VALUE);
         return ESP_OK;
     }
@@ -160,6 +159,12 @@ esp_err_t stepper_drv_disable(stepper_drv_handle_t* stepper_handle)
     atomic_store(&stepper_handle->state, STEPPER_DRV_STATE_DISABLED);
 
     return ESP_OK;
+}
+
+bool stepper_drv_is_enabled(stepper_drv_handle_t* stepper_handle)
+{
+    ESP_RETURN_ON_FALSE(stepper_handle != NULL, false, TAG, "Invalid stepper handle");
+    return atomic_load(&stepper_handle->state) == STEPPER_DRV_STATE_ENABLED;
 }
 
 static void stepper_drv_rmt_build_symbol(const uint32_t frequency_hz, rmt_symbol_word_t *symbol)

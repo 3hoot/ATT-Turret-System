@@ -20,7 +20,7 @@ extern "C"
  *
  * @return The converted 16-bit unsigned integer.
  */
-uint16_t utils_bytes_to_u16_be (const uint8_t *bytes, const size_t start_index);
+uint16_t utils_bytes_to_u16_be(const uint8_t *bytes, const size_t start_index);
 
 /*
  * Converts a sequence of bytes to a 32-bit unsigned integer in big-endian format.
@@ -30,7 +30,17 @@ uint16_t utils_bytes_to_u16_be (const uint8_t *bytes, const size_t start_index);
  *
  * @return The converted 32-bit unsigned integer.
  */
-uint32_t utils_bytes_to_u32_be (const uint8_t *bytes, const size_t start_index);
+uint32_t utils_bytes_to_u32_be(const uint8_t *bytes, const size_t start_index);
+
+/*
+ * Converts a sequence of bytes to a float in big-endian format.
+ *
+ * @param bytes A pointer to the array of bytes.
+ * @param start_index The index of the first byte to convert.
+ *
+ * @return The converted float.
+ */
+float utils_bytes_to_float_be(const uint8_t *bytes, const size_t start_index);
 
 /*
  * Converts a 16-bit unsigned integer to a sequence of bytes in big-endian format.
@@ -49,6 +59,15 @@ void utils_u16_to_bytes_be(const uint16_t value, uint8_t *bytes, const size_t st
  * @param start_index The index of the first byte to write.
  */
 void utils_u32_to_bytes_be(const uint32_t value, uint8_t *bytes, const size_t start_index);
+
+/*
+ * Converts a float to a sequence of bytes in big-endian format.
+ *
+ * @param value The float to convert.
+ * @param bytes A pointer to the array of bytes.
+ * @param start_index The index of the first byte to write.
+ */
+void utils_float_to_bytes_be(const float value, uint8_t *bytes, const size_t start_index);
 
 /*
  * Scans the I2C bus for connected devices and returns their addresses.

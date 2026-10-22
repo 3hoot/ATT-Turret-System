@@ -19,6 +19,7 @@
 #include "utils.h"
 #include "as5600.h"
 #include "ina226.h"
+#include "motion_controller.h"
 
 static const char *TAG = "app_main";
 
@@ -28,6 +29,8 @@ static const char *TAG = "app_main";
 static stepper_drv_handle_t stepper[APP_STEPPER_COUNT] = {0};
 static as5600_handle_t position_sensor[APP_AS5600_COUNT] = {0};
 static ina226_handle_t power_sensor[APP_INA226_COUNT] = {0};
+
+static motion_ctrl_handle_t motion_controller[APP_MOTION_CONTROLLER_COUNT] = {0};
 
 /* -------------- Command executor -------------- */
 
@@ -51,6 +54,7 @@ static esp_err_t app_send_ack(const uint8_t command_type, const esp_err_t status
 /*
  * Send a response frame in response to a received command.
  * Preforms an internal memcpy of the data to be sent, so the caller can free or modify the data after return.
+ * If the data_length is more than FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH, the function will block until all the data is sent.
  *
  * @param command_type The type of the command for which a response is being sent.
  * @param data Pointer to the data to include in the response frame.
@@ -160,6 +164,26 @@ void app_main(void)
 
     as5600_config_t position_sensor_B_config = AS5600_DEFAULT_CONFIG;
     ESP_ERROR_CHECK(as5600_init(bus_B_handle, &position_sensor_B_config, &position_sensor[B_ID]));
+
+    /* ----------- Motion controller init ----------- */
+
+    motion_ctrl_config_t motion_controller_A_config = {
+        .stepper = &stepper[A_ID],
+        .position_sensor = &position_sensor[A_ID],
+        .power_sensor = &power_sensor[A_ID],
+        .limits = {0},
+        .position_threshold = APP_MOTION_CONTROLLER_POSITION_THRESHOLD
+    };
+    ESP_ERROR_CHECK(motion_ctrl_init(&motion_controller_A_config, &motion_controller[A_ID]));
+
+    motion_ctrl_config_t motion_controller_B_config = {
+        .stepper = &stepper[B_ID],
+        .position_sensor = &position_sensor[B_ID],
+        .power_sensor = &power_sensor[B_ID],
+        .limits = {0},
+        .position_threshold = APP_MOTION_CONTROLLER_POSITION_THRESHOLD
+    };
+    ESP_ERROR_CHECK(motion_ctrl_init(&motion_controller_B_config, &motion_controller[B_ID]));
 
     /* ------------ Command executor init ----------- */
 
@@ -331,6 +355,84 @@ static void app_executor_task(void *arg)
                 break;
             }
 
+            case APP_CMD_MCTRL_MOVE_CODE:
+            {
+                uint8_t controller_id = rx_frame.data[0];
+                motion_ctrl_move_t move = {0};
+                move.end_position = utils_bytes_to_float_be(rx_frame.data, 1);
+                move.step_frequency_hz = utils_bytes_to_u32_be(rx_frame.data, 5);
+                move.block_until_complete = (rx_frame.data[9] != 0);
+
+                ESP_LOGI(TAG, "Received MCTRL_MOVE command for controller ID: %d, end position: %f, step frequency: %u Hz, block until complete: %s",
+                         controller_id, move.end_position, move.step_frequency_hz, move.block_until_complete ? "true" : "false");
+
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, motion_ctrl_move(&motion_controller[controller_id], &move)));
+                break;
+            }
+
+            case APP_CMD_MCTRL_GET_POS_CODE:
+            {
+                uint8_t controller_id = rx_frame.data[0];
+                float position = 0;
+                ESP_ERROR_CHECK_WITHOUT_ABORT(motion_ctrl_get_position(&motion_controller[controller_id], &position));
+
+                ESP_LOGI(TAG, "Received MCTRL_GET_POS command for controller ID: %d, current position: %f", controller_id, position);
+
+                uint8_t position_bytes[4];
+                utils_float_to_bytes_be(position, position_bytes, 0);
+                ESP_ERROR_CHECK(app_send_response(rx_frame.type, position_bytes, sizeof(position_bytes)));
+                break;
+            }
+
+            case APP_CMD_MCTRL_DUMP_LOG_CODE:
+            {
+                uint8_t controller_id = rx_frame.data[0];
+                uint32_t sample_count = utils_bytes_to_u32_be(rx_frame.data, 1);
+
+                ESP_LOGI(TAG, "Received MCTRL_DUMP_LOG command for controller ID: %d, sample count: %u", controller_id, sample_count);
+
+                motion_ctrl_log_sample_t *log_samples = malloc(sample_count * sizeof(motion_ctrl_log_sample_t));
+                if (log_samples == NULL)
+                {
+                    ESP_LOGE(TAG, "Failed to allocate memory for log samples");
+                    break;
+                }
+
+                size_t actual_sample_count = 0;
+                ESP_ERROR_CHECK_WITHOUT_ABORT(motion_ctrl_dump_log(&motion_controller[controller_id], log_samples, sample_count, &actual_sample_count));
+
+                ESP_LOGI(TAG, "Dumped %zu log samples for controller ID: %d", actual_sample_count, controller_id);
+
+                size_t response_size = actual_sample_count * sizeof(motion_ctrl_log_sample_t);
+                ESP_ERROR_CHECK(app_send_response(rx_frame.type, (uint8_t *)log_samples, response_size));
+                free(log_samples);
+                break;
+            }
+
+            case APP_CMD_MCTRL_CALIBRATE_MAX_CODE:
+            {
+                uint8_t controller_id = rx_frame.data[0];
+                ESP_LOGI(TAG, "Received MCTRL_CALIBRATE_MAX command for controller ID: %d", controller_id);
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, motion_ctrl_register_max_limit(&motion_controller[controller_id])));
+                break;
+            }
+
+            case APP_CMD_MCTRL_CALIBRATE_INT_CODE:
+            {
+                uint8_t controller_id = rx_frame.data[0];
+                ESP_LOGI(TAG, "Received MCTRL_CALIBRATE_INT command for controller ID: %d", controller_id);
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, motion_ctrl_register_int_limit(&motion_controller[controller_id])));
+                break;
+            }
+
+            case APP_CMD_MCTRL_CALIBRATE_MIN_CODE:
+            {
+                uint8_t controller_id = rx_frame.data[0];
+                ESP_LOGI(TAG, "Received MCTRL_CALIBRATE_MIN command for controller ID: %d", controller_id);
+                ESP_ERROR_CHECK(app_send_ack(rx_frame.type, motion_ctrl_register_min_limit(&motion_controller[controller_id])));
+                break;
+            }
+
             default:
                 ESP_LOGW(TAG, "Received unknown command type: 0x%02X", rx_frame.type);
                 break;
@@ -356,14 +458,42 @@ static esp_err_t app_send_ack(const uint8_t command_type, const esp_err_t status
 
 static esp_err_t app_send_response(const uint8_t command_type, const uint8_t *data, const size_t data_length)
 {
-    framed_serial_frame_t tx_frame = {.type = APP_CMD_ACK_CODE(command_type), .data_length = data_length, .checksum = 0};
-    memcpy(tx_frame.data, data, data_length);
-    const size_t tx_frame_size = sizeof(tx_frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH + tx_frame.data_length;
-
-    if (xRingbufferSend(framed_serial_tx_buffer, &tx_frame, tx_frame_size, APP_TX_BUFFER_TIMEOUT_MS) != pdTRUE)
+    if (data_length <= FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH)
     {
-        ESP_LOGE(TAG, "Failed to send response for command type: 0x%02X", command_type);
-        return ESP_FAIL;
+        framed_serial_frame_t tx_frame = {.type = APP_CMD_ACK_CODE(command_type), .data_length = data_length, .checksum = 0};
+        memcpy(tx_frame.data, data, data_length);
+        const size_t tx_frame_size = sizeof(tx_frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH + tx_frame.data_length;
+
+        if (xRingbufferSend(framed_serial_tx_buffer, &tx_frame, tx_frame_size, APP_TX_BUFFER_TIMEOUT_MS) != pdTRUE)
+        {
+            ESP_LOGE(TAG, "Failed to send response for command type: 0x%02X", command_type);
+            return ESP_FAIL;
+        }
+    }
+    else
+    {
+        const size_t frames_needed = data_length / FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH + ((data_length % FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH) ? 1 : 0);
+        for (size_t i = 0; i < frames_needed; ++i)
+        {
+            size_t chunk_size = FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH;
+            if (i == frames_needed - 1 && (data_length % FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH) != 0)
+            {
+                chunk_size = data_length % FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH;
+            }
+
+            framed_serial_frame_t tx_frame = {.type = APP_CMD_ACK_CODE(command_type), .data_length = chunk_size, .checksum = 0};
+            memcpy(tx_frame.data, data + i * FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH, chunk_size);
+            const size_t tx_frame_size = sizeof(tx_frame) - FRAMED_SERIAL_MAX_FRAME_DATA_LENGTH + tx_frame.data_length;
+
+            if (xRingbufferSend(framed_serial_tx_buffer, &tx_frame, tx_frame_size, APP_TX_BUFFER_TIMEOUT_MS) != pdTRUE)
+            {
+                ESP_LOGE(TAG, "Failed to send response frame %zu/%zu for command type: 0x%02X", i + 1, frames_needed, command_type);
+                return ESP_FAIL;
+            }
+
+            /* Allow some breathing room for framed serial communication */
+            vTaskDelay(pdMS_TO_TICKS(APP_TX_BUFFER_INTER_FRAME_DELAY_MS));
+        }
     }
 
     ESP_LOGI(TAG, "Response sent for command type: 0x%02X with data length: %zu", command_type, data_length);

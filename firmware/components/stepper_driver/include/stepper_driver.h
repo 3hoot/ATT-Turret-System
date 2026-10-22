@@ -124,6 +124,14 @@ esp_err_t stepper_drv_enable(stepper_drv_handle_t* stepper_handle);
  */
 esp_err_t stepper_drv_disable(stepper_drv_handle_t* stepper_handle);
 
+/*
+ * Gets the current state of the specified stepper motor.
+ *
+ * @param stepper_handle Pointer to the stepper handle.
+ * @return True if the stepper motor is enabled, false otherwise.
+ */
+bool stepper_drv_is_enabled(stepper_drv_handle_t* stepper_handle);
+
 #ifdef __cplusplus
 }
 #endif

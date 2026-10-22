@@ -8,7 +8,8 @@
 #define APP_EXECUTOR_TASK_PRIORITY   (10)
 #define APP_EXECUTOR_TASK_STACK_SIZE (4096)
 
-#define APP_TX_BUFFER_TIMEOUT_MS     (1000)
+#define APP_TX_BUFFER_TIMEOUT_MS            (1000)
+#define APP_TX_BUFFER_INTER_FRAME_DELAY_MS  (30)
 
 /* All command arguments are assumed to be in big-endian format. */
 
@@ -27,6 +28,13 @@
 #define APP_CMD_SENSE_GET_PWR_CODE  (0x0Au) /* [0] Sensor ID                            */
 #define APP_CMD_SENSE_GET_CURR_CODE (0x0Bu) /* [0] Sensor ID                            */
 #define APP_CMD_SENSE_GET_VOLT_CODE (0x0Cu) /* [0] Sensor ID                            */
+
+#define APP_CMD_MCTRL_MOVE_CODE          (0x0Du) /* [0] Controller ID, [1 - 4] End position, [5 - 8] Step frequency, [9] Block until complete */
+#define APP_CMD_MCTRL_GET_POS_CODE       (0x0Eu) /* [0] Controller ID                                                                         */
+#define APP_CMD_MCTRL_DUMP_LOG_CODE      (0x0Fu) /* [0] Controller ID, [1 - 4] Sample count                                                   */
+#define APP_CMD_MCTRL_CALIBRATE_MAX_CODE (0x10u) /* [0] Controller ID                                                                         */
+#define APP_CMD_MCTRL_CALIBRATE_INT_CODE (0x11u) /* [0] Controller ID                                                                         */
+#define APP_CMD_MCTRL_CALIBRATE_MIN_CODE (0x12u) /* [0] Controller ID                                                                         */
 
 /* ------------------- Stepper ------------------ */
 
@@ -66,5 +74,10 @@
 #define APP_INA226_B_I2C_ADDRESS    (0x44)
 #define APP_INA226_A_ALERT_GPIO_PIN (GPIO_NUM_8)
 #define APP_INA226_B_ALERT_GPIO_PIN (GPIO_NUM_14)
+
+/* -------------- Motion controller ------------- */
+
+#define APP_MOTION_CONTROLLER_COUNT              (2)
+#define APP_MOTION_CONTROLLER_POSITION_THRESHOLD (0.5f) /* Degrees */
 
 #endif /* CONFIG_H */
